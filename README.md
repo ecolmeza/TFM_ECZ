@@ -18,7 +18,7 @@ This model predict the volumen of shipments base on historical data of a busines
 
 Software:
 
-The software used to model the temprary series is RSTUDIO 
+The software used to model the temporary series is RSTUDIO 
 
 Data visualization:
 
