@@ -2,7 +2,7 @@
 # title: "Temporary series: TFM sales forecast"
 # author: "Eduardo Colmenares"
 # Input:
- Historical data and diferents information to predict the future production
+ Historical data and diferents information use to predict the future production
  
      - File Prod_factVT2.csv.csv -  Historical Data
      
