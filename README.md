@@ -3,8 +3,11 @@
 # author: "Eduardo Colmenares"
 # Input:
  Historical data and diferents information to predict the future production
+ 
      - File Prod_factVT2.csv.csv -  Historical Data
+     
      - File Service_type.csv - Summarized services 
+     
      - File DIAS LAB.csv - Labor days 
 
 # output; Predictions of future production 
