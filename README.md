@@ -26,5 +26,5 @@ Powerpoint and PowerBI is used to visualize and explain the results of the proje
 
 # Models discarted  
 
-The clasification models is discarted from the project because the results where not the expected.
+The clasification model is discarted from the project because the results where not the expected.
 
