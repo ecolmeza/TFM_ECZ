@@ -13,4 +13,9 @@ output:
 Project summary
 This model predict the volumen of shipments base on historical data of a business.
 
+Software
+The software used to model the temprary series is RSTUDIO 
+
+Data visualization 
+Powerpoint and PowerBI is used to visualize and explain the results of the project
 
