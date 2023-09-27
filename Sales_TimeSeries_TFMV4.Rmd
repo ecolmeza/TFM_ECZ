@@ -1,0 +1,855 @@
+
+####  PREDICTION MODEL ###################################################
+
+
+title: "Temporary series: TFM sales forecast"
+author: "Eduardo Colmenares"
+Input:
+ Historical data and diferents information to predict the future production
+     File Prod_factVT2.csv.csv -  Historical Data
+     File Service_type.csv - Summarized services 
+     File DIAS LAB.csv - Labor days 
+
+output:
+  # Predictions of future production 
+
+
+
+INSTALL PACKAGES 
+
+```{r install, include=FALSE}
+
+package.names <- c("knitr",
+                   "ggplot2",
+                   "patchwork",
+                   "tidyverse",
+                   "dslabs",
+                   "lubridate",
+                   "purrr",
+                   "pdftools",
+                   "fracdiff",
+                   "fpp2", 
+                   "tseries", 
+                   "TTR", 
+                   "seasonal",
+                   "zoo",
+                   "xts",
+                   "greybox",
+                   "smooth" ,
+                   "Metrics",
+                   "gridExtra",
+                   "prophet"
+                   )
+
+for (package.name in package.names){
+  if(!require(package.name, character.only = T)){install.packages(package.name, type = "both")}
+}
+
+all.packages <- c(package.names)
+```
+
+```{r libraries, include=FALSE}
+for (package.name in all.packages){
+  library(package.name, character.only = T)
+}
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## READ FILES  
+
+Read CSV files 
+   Prod_factVT2.csv - Historical data of the services by clients from Jan 2017
+   Service_type.csv - Summarize service information in 5 categories (PREM, 19H, ECOM, PPACK, OT, I)
+   DIAS LAB.csv - Labor days of Spain and Portugal 
+
+```{r}
+df.services = read.csv2("Prod_factVT2.csv")
+df.servicestype = read.csv2("Service_type.csv")
+df.lab = read.csv2("DIAS LAB.csv")
+```
+
+
+## MERGE DATAFRAMES 
+
+    Historical data with the services summarized information 
+
+```{r}
+df.services$Date <- as.Date (df.services$Date, format = "%d/%m/%Y") 
+df.services$shipments <- as.integer (df.services$shipments) 
+df.services <- merge(
+  x = df.services,
+  y = df.servicestype,
+  by = "Service",
+  all.x = TRUE
+)
+df.lab$Date <- as.Date (df.lab$Date, format = "%d/%m/%Y") 
+df.lab$date <- df.lab$Date - days(as.integer(format(df.lab$Date, "%d"))) + 1
+```
+
+```{r}
+write_excel_csv2(df.services, file = "alldataEXCEL.csv")
+```
+
+
+# DATA ANALYSYS OF THE INFORMATION 
+
+Filter services information by country  
+
+```{r}
+
+#ESP
+df.tmservicesESP = df.services %>% 
+           filter(Country == "ESP") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+
+df.tmservicesESP <- merge(
+           x = df.tmservicesESP,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+
+df.tmservicesESP$total_shipments = df.tmservicesESP$total_sum / df.tmservicesESP$DLABESP
+
+
+#POR
+df.tmservicesPOR = df.services %>% 
+           filter(Country == "POR") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+
+df.tmservicesPOR <- merge(
+           x = df.tmservicesPOR,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+
+df.tmservicesPOR$total_shipments = df.tmservicesPOR$total_sum / df.tmservicesPOR$DLABPOR
+
+#head(df.tmservicesESP)
+#head(df.tmservicesPOR)
+
+```
+
+
+Filter services by type of service  
+
+PREMIUM 
+```{r}
+#ESP AND SERV PREM
+df.tmservicesESPPREM = df.services %>% 
+           filter(Country == "ESP") %>%
+           filter(Serv_cod == "PREM") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesESPPREM <- merge(
+           x = df.tmservicesESPPREM,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesESPPREM$total_shipments = df.tmservicesESPPREM$total_sum / df.tmservicesESPPREM$DLABESP
+
+#POR AND SERV PREM
+df.tmservicesPORPREM = df.services %>% 
+           filter(Country == "POR") %>%
+           filter(Serv_cod == "PREM") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesPORPREM <- merge(
+           x = df.tmservicesPORPREM,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesPORPREM$total_shipments = df.tmservicesPORPREM$total_sum / df.tmservicesPORPREM$DLABPOR
+```
+
+19H 
+```{r}
+#ESP AND SERV 19H
+df.tmservicesESP19H = df.services %>% 
+           filter(Country == "ESP") %>%
+           filter(Serv_cod == "19H") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesESP19H <- merge(
+           x = df.tmservicesESP19H,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesESP19H$total_shipments = df.tmservicesESP19H$total_sum / df.tmservicesESP19H$DLABESP
+#POR AND SERV 19H
+df.tmservicesPOR19H = df.services %>% 
+           filter(Country == "POR") %>%
+           filter(Serv_cod == "19H") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesPOR19H <- merge(
+           x = df.tmservicesPOR19H,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesPOR19H$total_shipments = df.tmservicesPOR19H$total_sum / df.tmservicesPOR19H$DLABPOR
+```
+
+ECOM 
+```{r}
+#ESP AND SERV ECOM
+df.tmservicesESPECOM = df.services %>% 
+           filter(Country == "ESP") %>%
+           filter(Serv_cod == "ECOM") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesESPECOM <- merge(
+           x = df.tmservicesESPECOM,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesESPECOM$total_shipments = df.tmservicesESPECOM$total_sum / df.tmservicesESPECOM$DLABESP
+#POR AND SERV ECOM
+df.tmservicesPORECOM = df.services %>% 
+           filter(Country == "POR") %>%
+           filter(Serv_cod == "ECOM") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesPORECOM <- merge(
+           x = df.tmservicesPORECOM,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesPORECOM$total_shipments = df.tmservicesPORECOM$total_sum / df.tmservicesPORECOM$DLABPOR
+```
+
+PPACK 
+```{r}
+#ESP AND SERV PPACK
+df.tmservicesESPPPACK = df.services %>% 
+           filter(Country == "ESP") %>%
+           filter(Serv_cod == "PPACK") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesESPPPACK <- merge(
+           x = df.tmservicesESPPPACK,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesESPPPACK$total_shipments = df.tmservicesESPPPACK$total_sum / df.tmservicesESPPPACK$DLABESP
+#POR AND SERV PPACK
+df.tmservicesPORPPACK = df.services %>% 
+           filter(Country == "POR") %>%
+           filter(Serv_cod == "PPACK") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesPORPPACK <- merge(
+           x = df.tmservicesPORPPACK,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesPORPPACK$total_shipments = df.tmservicesPORPPACK$total_sum / df.tmservicesPORPPACK$DLABPOR
+```
+
+OT 
+```{r}
+#ESP AND SERV PPACK
+df.tmservicesESPOT = df.services %>% 
+           filter(Country == "ESP") %>%
+           filter(Serv_cod == "OT") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesESPOT <- merge(
+           x = df.tmservicesESPOT,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesESPOT$total_shipments = df.tmservicesESPOT$total_sum / df.tmservicesESPOT$DLABESP
+#POR AND SERV PPACK
+df.tmservicesPOROT = df.services %>% 
+           filter(Country == "POR") %>%
+           filter(Serv_cod == "OT") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesPOROT <- merge(
+           x = df.tmservicesPOROT,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesPOROT$total_shipments = df.tmservicesPOROT$total_sum / df.tmservicesPOROT$DLABPOR
+```
+
+I 
+```{r}
+#ESP AND SERV I
+df.tmservicesESPI = df.services %>% 
+           filter(Country == "ESP") %>%
+           filter(Serv_cod == "I") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesESPI <- merge(
+           x = df.tmservicesESPI,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesESPI$total_shipments = df.tmservicesESPI$total_sum / df.tmservicesESPI$DLABESP
+
+
+#POR AND SERV PPACK
+df.tmservicesPORI = df.services %>% 
+           filter(Country == "POR") %>%
+           filter(Serv_cod == "I") %>%
+           mutate(Date = as.Date(Date)) %>% 
+           group_by(Date) %>% 
+           summarize(total_sum = sum(shipments))
+df.tmservicesPORI <- merge(
+           x = df.tmservicesPORI,
+           y = df.lab,
+           by = "Date",
+           all.x = TRUE)
+df.tmservicesPORI$total_shipments = df.tmservicesPORI$total_sum / df.tmservicesPORI$DLABPOR
+```
+
+
+Create timeseries and evaluate best forecast model 
+
+COUNTRY 
+
+SPAIN 
+```{r}
+# ts by country
+
+serviceseriesESP <- ts(df.tmservicesESP$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesPOR <- ts(df.tmservicesPOR$total_shipments, frequency=12, start = c(2017,1))
+
+```
+
+FORECAST EVALUATION MODEL
+```{r}
+serviceseriesESP_train <- window(serviceseriesESP,
+                                 start=start(serviceseriesESP), 
+                                 end=end(serviceseriesESP)-c(1,0)) # - 1YEAR 
+
+months.forecast <- 12
+model_mean <- meanf(serviceseriesESP_train, lambda = "auto", h = months.forecast)
+model_naive <- naive(serviceseriesESP_train, lambda = "auto", h = months.forecast)
+model_snaive <- snaive(serviceseriesESP_train, lambda = "auto", h = months.forecast)
+model_sma <- sma(serviceseriesESP_train, lambda = "auto") %>% forecast(h=months.forecast)
+model_ets <- ets(serviceseriesESP_train, lambda = "auto") %>% forecast(h = months.forecast)
+model_arima <- auto.arima(serviceseriesESP_train, lambda = "auto") %>% forecast(h = months.forecast)
+autoplot(serviceseriesESP_train) +
+  autolayer(model_mean, series=model_mean$method, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_naive, series=model_naive$method, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_snaive, series=model_snaive$method, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_sma, series=model_sma$model$model, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_ets, series=model_ets$method, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_arima, series=model_arima$method, alpha=0.9, PI=FALSE, size=1)  +
+  autolayer(serviceseriesESP, color=1, alpha=0.7)
+
+```
+
+ERRORS
+```{r}
+res <- data.frame(Mean=t(forecast::accuracy(model_mean, serviceseriesESP)),
+           Naive=t(forecast::accuracy(model_naive, serviceseriesESP)),
+           SNaive=t(forecast::accuracy(model_snaive, serviceseriesESP)),
+           ETS=t(forecast::accuracy(model_ets, serviceseriesESP)),
+           ARIMA=t(forecast::accuracy(model_arima, serviceseriesESP))) %>%
+  rownames_to_column("Metric") %>%
+  pivot_longer(cols=-Metric, names_sep = "\\.", names_to = c("Method","Set"), values_to = "Result")
+ggplot(data = res %>% filter(Metric %in% c("RMSE","MAE","MAPE")), aes(x = Method, y = Result, fill = Method)) +
+  geom_bar(stat = "identity", position="dodge") +  
+  geom_point(colour="black",pch=21, size=2) + 
+  scale_fill_discrete(name = "Modelos") +
+  facet_wrap(~ Set + Metric, scales = "free", nrow = 2) + 
+  theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+    )
+
+
+```
+
+---------------------------------------------------
+
+PORTUGAL 
+```{r}
+# ts by country
+
+serviceseriesESP <- ts(df.tmservicesESP$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesPOR <- ts(df.tmservicesPOR$total_shipments, frequency=12, start = c(2017,1))
+
+```
+
+FORECAST EVALUATION MODEL
+```{r}
+serviceseriesPOR_train <- window(serviceseriesPOR,
+                                 start=start(serviceseriesPOR), 
+                                 end=end(serviceseriesPOR)-c(1,0)) # - 1YEAR 
+
+months.forecast <- 12
+model_mean <- meanf(serviceseriesPOR_train, lambda = "auto", h = months.forecast)
+model_naive <- naive(serviceseriesPOR_train, lambda = "auto", h = months.forecast)
+model_snaive <- snaive(serviceseriesPOR_train, lambda = "auto", h = months.forecast)
+model_sma <- sma(serviceseriesPOR_train, lambda = "auto") %>% forecast(h=months.forecast)
+model_ets <- ets(serviceseriesPOR_train, lambda = "auto") %>% forecast(h = months.forecast)
+model_arima <- auto.arima(serviceseriesPOR_train, lambda = "auto") %>% forecast(h = months.forecast)
+autoplot(serviceseriesPOR_train) +
+  autolayer(model_mean, series=model_mean$method, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_naive, series=model_naive$method, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_snaive, series=model_snaive$method, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_sma, series=model_sma$model$model, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_ets, series=model_ets$method, alpha=0.9, PI=FALSE, size=1) + 
+  autolayer(model_arima, series=model_arima$method, alpha=0.9, PI=FALSE, size=1)  +
+  autolayer(serviceseriesPOR, color=1, alpha=0.7)
+
+```
+
+ERRORS
+```{r}
+res <- data.frame(Mean=t(forecast::accuracy(model_mean, serviceseriesPOR)),
+           Naive=t(forecast::accuracy(model_naive, serviceseriesPOR)),
+           SNaive=t(forecast::accuracy(model_snaive, serviceseriesPOR)),
+           ETS=t(forecast::accuracy(model_ets, serviceseriesPOR)),
+           ARIMA=t(forecast::accuracy(model_arima, serviceseriesPOR))) %>%
+  rownames_to_column("Metric") %>%
+  pivot_longer(cols=-Metric, names_sep = "\\.", names_to = c("Method","Set"), values_to = "Result")
+ggplot(data = res %>% filter(Metric %in% c("RMSE","MAE","MAPE")), aes(x = Method, y = Result, fill = Method)) +
+  geom_bar(stat = "identity", position="dodge") +  
+  geom_point(colour="black",pch=21, size=2) + 
+  scale_fill_discrete(name = "Modelos") +
+  facet_wrap(~ Set + Metric, scales = "free", nrow = 2) + 
+  theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+    )
+
+
+```
+
+
+
+
+## FORECAST BY COUNTRY
+
+```{r}
+# ts by country
+
+serviceseriesESP <- ts(df.tmservicesESP$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesPOR <- ts(df.tmservicesPOR$total_shipments, frequency=12, start = c(2017,1))
+
+# forecast by country
+
+months.forecast <- 17
+#ESP
+best_model_ESP <- ets(serviceseriesESP, lambda = "auto") %>% forecast(h = months.forecast)
+
+predictionsESP <- predict(best_model_ESP, newdata = future_production)
+
+df.predictions <- data.frame(date = as.Date(time(predictionsESP$mean)), meanpred_ESP = predictionsESP$mean)
+
+df.predictionscountry <- rbind(df.predictions)
+rm(df.predictions)
+
+#POR
+best_model_POR <- auto.arima(serviceseriesPOR, lambda = "auto") %>% forecast(h = months.forecast)
+
+predictionsPOR <- predict(best_model_POR, newdata = future_production)
+
+df.predictions <- data.frame(date = as.Date(time(predictionsPOR$mean)), meanpred_POR = predictionsPOR$mean)
+
+df.predictionscountry <- merge(
+           x = df.predictionscountry,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+
+rm(df.predictions)
+
+#forecast in months 
+df.predictionscountry<- merge(
+           x = df.predictionscountry,
+           y = df.lab[c("date","DLABESP","DLABPOR")],
+           by = "date",
+           all.x = TRUE,
+           )
+
+
+df.predictionscountry$DLABESP = as.numeric(df.predictionscountry$DLABESP)
+df.predictionscountry$DLABPOR = as.numeric(df.predictionscountry$DLABPOR)
+
+df.predictionscountry$F_ESP = df.predictionscountry$meanpred_ESP * df.predictionscountry$DLABESP
+df.predictionscountry$F_POR = df.predictionscountry$meanpred_POR * df.predictionscountry$DLABPOR
+
+#head (df.predictionscountry)
+write.csv(df.predictionscountry, file = "predictionsCOUNTRY.csv")
+```
+
+
+## FORECAST BY TYPE OF SERVICE
+
+```{r}
+# ts by SERVICE
+#ESP
+serviceseriesESPPREM <- ts(df.tmservicesESPPREM$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesESP19H <- ts(df.tmservicesESP19H$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesESPECOM <- ts(df.tmservicesESPECOM$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesESPPPACK <- ts(df.tmservicesESPPPACK$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesESPOT <- ts(df.tmservicesESPOT$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesESPI <- ts(df.tmservicesESPI$total_shipments, frequency=12, start = c(2017,1))
+#POR
+serviceseriesPORPREM <- ts(df.tmservicesPORPREM$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesPOR19H <- ts(df.tmservicesPOR19H$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesPORECOM <- ts(df.tmservicesPORECOM$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesPORPPACK <- ts(df.tmservicesPORPPACK$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesPOROT <- ts(df.tmservicesPOROT$total_shipments, frequency=12, start = c(2017,1))
+serviceseriesPORI <- ts(df.tmservicesPORI$total_shipments, frequency=12, start = c(2017,1))
+
+# forecast by SERVICE
+months.forecast <- 17
+
+#ESP
+best_model_ESPPREM <- snaive(serviceseriesESPPREM, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsESPPREM <- predict(best_model_ESPPREM, newdata = future_production)
+
+best_model_ESP19H <- auto.arima(serviceseriesESP19H, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsESP19H <- predict(best_model_ESP19H, newdata = future_production)
+
+best_model_ESPECOM <- ets(serviceseriesESPECOM, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsESPECOM <- predict(best_model_ESPECOM, newdata = future_production)
+
+best_model_ESPPPACK <- ets(serviceseriesESPPPACK, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsESPPPACK <- predict(best_model_ESPPPACK, newdata = future_production)
+
+best_model_ESPOT <- auto.arima(serviceseriesESPOT, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsESPOT <- predict(best_model_ESPOT, newdata = future_production)
+
+best_model_ESPI <- ets(serviceseriesESPI, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsESPI <- predict(best_model_ESPI, newdata = future_production)
+
+
+#POR
+
+best_model_PORPREM <- ets(serviceseriesPORPREM, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsPORPREM <- predict(best_model_PORPREM, newdata = future_production)
+
+best_model_POR19H <- snaive(serviceseriesPOR19H, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsPOR19H <- predict(best_model_POR19H, newdata = future_production)
+
+best_model_PORECOM <- auto.arima(serviceseriesPORECOM, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsPORECOM <- predict(best_model_PORECOM, newdata = future_production)
+
+best_model_PORPPACK <- ets(serviceseriesPORPPACK, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsPORPPACK <- predict(best_model_PORPPACK, newdata = future_production)
+
+best_model_POROT <- snaive(serviceseriesPOROT, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsPOROT <- predict(best_model_POROT, newdata = future_production)
+
+best_model_PORI <- ets(serviceseriesPORI, lambda = "auto") %>% forecast(h = months.forecast)
+predictionsPORI <- predict(best_model_PORI, newdata = future_production)
+
+
+```
+
+## Create forecast data_frame 
+
+```{r}
+#DATA FRAME PREDICTIONS
+#ESP
+df.predictions <- data.frame(date = as.Date(time(predictionsESPPREM$mean)), meanpred_ESPPREM = predictionsESPPREM$mean)
+df.predictionsServices <- rbind(df.predictions)
+rm(df.predictions)
+df.predictions <- data.frame(date = as.Date(time(predictionsESP19H$mean)), meanpred_ESP19H = predictionsESP19H$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+df.predictions <- data.frame(date = as.Date(time(predictionsESPECOM$mean)), meanpred_ESPECOM = predictionsESPECOM$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+df.predictions <- data.frame(date = as.Date(time(predictionsESPPPACK$mean)), meanpred_ESPPACK = predictionsESPPPACK$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+df.predictions <- data.frame(date = as.Date(time(predictionsESPOT$mean)), meanpred_ESPOT = predictionsESPOT$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+df.predictions <- data.frame(date = as.Date(time(predictionsESPI$mean)), meanpred_ESPI = predictionsESPI$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+
+#POR
+df.predictions <- data.frame(date = as.Date(time(predictionsPORPREM$mean)), meanpred_PORPREM = predictionsPORPREM$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+
+df.predictions <- data.frame(date = as.Date(time(predictionsPOR19H$mean)), meanpred_POR19H = predictionsPOR19H$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+df.predictions <- data.frame(date = as.Date(time(predictionsPORECOM$mean)), meanpred_PORECOM = predictionsPORECOM$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+df.predictions <- data.frame(date = as.Date(time(predictionsPORPPACK$mean)), meanpred_PORPPACK = predictionsPORPPACK$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+df.predictions <- data.frame(date = as.Date(time(predictionsPOROT$mean)), meanpred_POROT = predictionsPOROT$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+df.predictions <- data.frame(date = as.Date(time(predictionsPORI$mean)), meanpred_PORI = predictionsPORI$mean)
+df.predictionsServices <- merge(
+           x = df.predictionsServices,
+           y = df.predictions,
+           by = "date",
+           all.x = TRUE)
+rm(df.predictions)
+
+head(df.predictionsServices)
+```
+
+#forecast of Type of services by month and country 
+
+```{r}
+#forecast in months 
+df.predictionsServices<- merge(
+           x = df.predictionsServices,
+           y = df.lab[c("date","DLABESP","DLABPOR")],
+           by = "date",
+           all.x = TRUE,
+           )
+
+
+df.predictionsServices$DLABESP = as.numeric(df.predictionsServices$DLABESP)
+df.predictionsServices$DLABPOR = as.numeric(df.predictionsServices$DLABPOR)
+
+df.predictionsServices$FS_ESPPREM = df.predictionsServices$meanpred_ESPPREM * df.predictionsServices$DLABESP
+df.predictionsServices$FS_ESP19H = df.predictionsServices$meanpred_ESP19H * df.predictionsServices$DLABESP
+df.predictionsServices$FS_ESPECOM = df.predictionsServices$meanpred_ESPECOM * df.predictionsServices$DLABESP
+df.predictionsServices$FS_ESPPACK = df.predictionsServices$meanpred_ESPPACK * df.predictionsServices$DLABESP
+df.predictionsServices$FS_ESPOT = df.predictionsServices$meanpred_ESPOT * df.predictionsServices$DLABESP
+df.predictionsServices$FS_ESPI = df.predictionsServices$meanpred_ESPI * df.predictionsServices$DLABESP
+
+df.predictionsServices$FS_PORPREM = df.predictionsServices$meanpred_PORPREM * df.predictionsServices$DLABPOR
+df.predictionsServices$FS_POR19H = df.predictionsServices$meanpred_POR19H * df.predictionsServices$DLABPOR
+df.predictionsServices$FS_PORECOM = df.predictionsServices$meanpred_PORECOM * df.predictionsServices$DLABPOR
+df.predictionsServices$FS_PORPPACK = df.predictionsServices$meanpred_PORPPACK * df.predictionsServices$DLABPOR
+df.predictionsServices$FS_POROT = df.predictionsServices$meanpred_POROT * df.predictionsServices$DLABPOR
+df.predictionsServices$FS_PORI = df.predictionsServices$meanpred_PORI * df.predictionsServices$DLABPOR
+
+df.predictionsServices$FS_ESP = df.predictionsServices$FS_ESPPREM + 
+                                df.predictionsServices$FS_ESP19H + 
+                                df.predictionsServices$FS_ESPECOM +
+                                df.predictionsServices$FS_ESPPACK + 
+                                df.predictionsServices$FS_ESPOT + 
+                                df.predictionsServices$FS_ESPI
+
+df.predictionsServices$FS_POR = df.predictionsServices$FS_PORPREM + 
+                                df.predictionsServices$FS_POR19H + 
+                                df.predictionsServices$FS_PORECOM +
+                                df.predictionsServices$FS_PORPPACK + 
+                                df.predictionsServices$FS_POROT + 
+                                df.predictionsServices$FS_PORI
+
+
+
+head (df.predictionsServices)
+write.csv(df.predictionsServices, file = "predictionsServices.csv")
+write_excel_csv2(df.predictionsServices, file = "predictionsServicesEXCEL.csv")
+```
+
+
+
+Graphs:
+
+
+```{r, fig.asp=0.4, fig.width=10}
+autoplot(serviceseriesESP) +
+  autolayer(best_model_ESP, series="ETS - ESP", alpha=0.9, size=1) +
+  autolayer(serviceseriesESP, size=0.75, color=1, alpha=0.7)+
+  
+
+autoplot(serviceseriesPOR) +
+  autolayer(best_model_POR, series="ETS - POR", alpha=0.9, size=1) +
+  autolayer(serviceseriesPOR, size=0.75, color=1, alpha=0.7)
+```
+
+
+```{r, fig.asp=0.9, fig.width=10, ggtitle("SHIPMENTS FORECAST")}
+autoplot(serviceseriesESPPREM) +
+  autolayer(best_model_ESPPREM$mean, series="ESPPREM", color =1 , alpha=0.95, size=1) +
+  autolayer(serviceseriesESPPREM, size=0.75, color=1, alpha=0.4)+
+  autolayer(serviceseriesESP19H, size=0.75, color=2, alpha=0.4)+
+  autolayer(best_model_ESP19H$mean, series="ES19H", color =2, alpha=0.95, size=1) +
+  autolayer(serviceseriesESPECOM, size=0.75, color=3, alpha=0.4)+
+  autolayer(best_model_ESPECOM$mean, series="ECOM", color=3, alpha=1,5, size=1) +
+  autolayer(serviceseriesESPPPACK, size=0.75, color=4, alpha=0.4)+
+  autolayer(best_model_ESPPPACK$mean, series="PPACK", color =4, alpha=0.95, size=1) + 
+  autolayer(serviceseriesESPOT, size=0.75, color=5, alpha=0.4)+
+  autolayer(best_model_ESPOT$mean, series="OT", color = 5, alpha=0.95, size=1) +
+  autolayer(serviceseriesESPI, size=0.75, color=6, alpha=0.4)+
+  autolayer(best_model_ESPI$mean, series="I", color =6, alpha=0.95, size=1)
+  
+```
+
+
+```{r, fig.asp=0.9, fig.width=10}
+autoplot(serviceseriesPORPREM) +
+  autolayer(best_model_PORPREM$mean, series = "ESPPREM", color =1 , alpha=0.95, size=1) +
+  autolayer(serviceseriesPORPREM, size=0.75, color=1, alpha=0.4)+
+  autolayer(serviceseriesPOR19H, size=0.75, color=2, alpha=0.4)+
+  autolayer(best_model_POR19H$mean, series="ES19H", color =2, alpha=0.95, size=1) +
+  autolayer(serviceseriesPORECOM, size=0.75, color=3, alpha=0.4)+
+  autolayer(best_model_PORECOM$mean, series="ECOM", color=3, alpha=1,5, size=1) +
+  autolayer(serviceseriesPORPPACK, size=0.75, color=4, alpha=0.4)+
+  autolayer(best_model_PORPPACK$mean, series="PPACK", color =4, alpha=0.95, size=1) + 
+  autolayer(serviceseriesPOROT, size=0.75, color=5, alpha=0.4)+
+  autolayer(best_model_POROT$mean, series="OT", color = 5, alpha=0.95, size=1) +
+  autolayer(serviceseriesPORI, size=0.75, color=6, alpha=0.4)+
+  autolayer(best_model_PORI$mean, series="I", color =6, alpha=0.95, size=1)
+  
+```
+
+
+```{r}
+#REAL DATA 
+#ESP
+
+df.realdata <- select(df.tmservicesESP19H, Date, total_sum)
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "ESP19H"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesESPPREM[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "ESPPREM"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesESPECOM[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "ESPECOM"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesESPPPACK[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "ESPPPACK"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesESPOT[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "ESPOT"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesESPI[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "ESPI"
+
+
+
+
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesPOR19H[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "POR19H"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesPORPREM[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "PORPREM"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesPORECOM[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "PORECOM"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesPORPPACK[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "PORPPACK"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesPOROT[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "POROT"
+df.realdata<- merge(
+           x = df.realdata,
+           y = df.tmservicesPORI[c("Date","total_sum")],
+           by = "Date",
+           all.x = TRUE,
+           )
+colnames(df.realdata)[colnames(df.realdata) == "total_sum"] <- "PORI"
+
+write.csv(df.realdata, file = "rdataServices.csv")
+write_excel_csv2(df.realdata, file = "rdataEXCEL.csv")
+
+
+head(df.realdata)
+```
+
