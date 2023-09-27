@@ -10,7 +10,7 @@
      
      - File DIAS LAB.csv - Labor days 
 
-# output; Predictions of future production 
+# Output: Predictions of future production 
 
 Project summary
 This model predict the volumen of shipments base on historical data of a business.
