@@ -1,9 +1,16 @@
 # TFM_ECZ
-TFM Data Science - Eduardo Colmenares 
+title: "Temporary series: TFM sales forecast"
+author: "Eduardo Colmenares"
+Input:
+ Historical data and diferents information to predict the future production
+     File Prod_factVT2.csv.csv -  Historical Data
+     File Service_type.csv - Summarized services 
+     File DIAS LAB.csv - Labor days 
 
-TFM Clients clustering and future service prediction
+output:
+  # Predictions of future production 
 
-Data for the project are the services of a year 
+Project summary
+This model predict the volumen of shipments base on historical data of a business.
 
-Clustering features are: Type of service, Weight of the packages and volumns
 
